@@ -1,0 +1,12 @@
+# Javaコンパイル結果
+*.class
+
+# Eclipseのビルド出力
+/bin/
+
+# ログ
+*.log
+
+# Windows
+Thumbs.db
+Desktop.ini
