@@ -4,6 +4,9 @@
 # Eclipseのビルド出力
 /bin/
 
+# APIから取得したJSON
+/output/
+
 # ログ
 *.log
 
