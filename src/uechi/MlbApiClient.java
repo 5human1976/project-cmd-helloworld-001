@@ -8,10 +8,11 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.time.DateTimeException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -30,10 +31,10 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  *
  * 【概要】
  * MLB Stats APIの2日分の試合から、日本時間の当日に開始する試合を抽出します。
- * 必要な試合情報を整形したJSONとして保存し、日時変換とJSON処理の学習に使用します。
+ * 試合一覧を表示し、必要な情報を整形したJSONとして保存することで日時変換とJSON処理の学習に使用します。
  *
  * 【作成日】2026-09-24
- * 【最終更新日】2026-10-04
+ * 【最終更新日】2026-10-05
  *
  * @author masa
  * @version 1.0
@@ -43,7 +44,7 @@ public class MlbApiClient {
             "https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=";
 
     /**
-     * 日本時間の当日に開始するMLBの試合一覧を取得し、整形したJSONファイルに保存します。
+     * 日本時間の当日に開始するMLBの試合一覧を表示し、整形したJSONファイルに保存します。
      * 失敗時は原因を表示し、終了コード1で終了します。
      *
      * @param args コマンドライン引数（使用しません）
@@ -121,6 +122,11 @@ public class MlbApiClient {
             System.out.println("HTTP Status  : " + httpStatus);
             if (totalGames >= 0) {
                 System.out.println("取得試合数   : " + totalGames);
+
+                // 正常終了の場合は、抽出済みの試合一覧を出力先の前に表示します。
+                if (exitCode == 0) {
+                    printGames(games);
+                }
                 System.out.println("出力ファイル : " + outputFile.toString().replace('\\', '/'));
             }
 
@@ -138,6 +144,41 @@ public class MlbApiClient {
         // 異常終了の場合は終了コード1を返し、正常終了の場合はそのまま終了します。
         if (exitCode != 0) {
             System.exit(1);
+        }
+    }
+
+    /**
+     * 抽出済みの試合の対戦チーム、日本時間の開始時刻、試合状態を表示します。
+     *
+     * @param games 日本時間の対象日に該当する試合一覧
+     */
+    private static void printGames(ArrayNode games) {
+        // 試合一覧の見出しを、前後に空行を入れて表示します。
+        System.out.println();
+        System.out.println("--- 試合一覧 ---");
+        System.out.println();
+
+        // 試合が0件の場合は、対象日の試合がないことを表示します。
+        if (games.isEmpty()) {
+            System.out.println("対象日の試合はありません。");
+            System.out.println();
+            return;
+        }
+
+        // 日本時間の日時から時刻を整形し、抽出済みの順序で各試合を表示します。
+        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
+        int gameNumber = 1;
+        for (JsonNode game : games) {
+            String awayTeam = game.path("awayTeam").asText("-");
+            String homeTeam = game.path("homeTeam").asText("-");
+            String startTime = OffsetDateTime.parse(game.path("gameDateJst").asText())
+                    .format(timeFormatter);
+            String status = game.path("status").asText("-");
+            System.out.println(gameNumber + ". " + awayTeam + " @ " + homeTeam);
+            System.out.println("   開始時刻 : " + startTime + " JST");
+            System.out.println("   状態     : " + status);
+            System.out.println();
+            gameNumber++;
         }
     }
 
