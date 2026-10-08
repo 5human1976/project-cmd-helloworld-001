@@ -30,11 +30,11 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  * MlbApiClient.java
  *
  * 【概要】
- * MLB Stats APIの2日分の試合から、日本時間の当日に開始する試合を抽出します。
+ * MLB Stats APIの2日分の試合から、日本時間の対象日に開始する試合を抽出します。
  * 試合一覧を表示し、必要な情報を整形したJSONとして保存することで日時変換とJSON処理の学習に使用します。
  *
  * 【作成日】2026-09-24
- * 【最終更新日】2026-10-05
+ * 【最終更新日】2026-10-08
  *
  * @author masa
  * @version 1.0
@@ -44,23 +44,50 @@ public class MlbApiClient {
             "https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=";
 
     /**
-     * 日本時間の当日に開始するMLBの試合一覧を表示し、整形したJSONファイルに保存します。
+     * 指定日または日本時間の当日に開始するMLBの試合一覧を表示し、整形したJSONファイルに保存します。
      * 失敗時は原因を表示し、終了コード1で終了します。
      *
-     * @param args コマンドライン引数（使用しません）
+     * @param args 対象日（YYYY-MM-DD形式、省略時は日本時間の当日）
      */
     public static void main(String[] args) {
         // 開始時点の経過時間計測用の値をナノ秒単位で記録します。
         long startTime = System.nanoTime();
 
-        // 日本時間の当日の日付を取得し、日付を含む出力先を作成します。
-        LocalDate date = LocalDate.now(ZoneId.of("Asia/Tokyo"));
+        // 見出しを表示し、APIへアクセスする前に引数の個数と日付を確認します。
+        System.out.println("=== MLB 試合情報取得 ===");
+        System.out.println();
+        LocalDate date;
+        String argumentError = "対象日の形式が正しくありません。YYYY-MM-DD形式で指定してください。";
+        try {
+            if (args.length > 1) {
+                argumentError = "使用方法: java MlbApiClient [YYYY-MM-DD]";
+                throw new IllegalArgumentException(argumentError);
+            }
+
+            // 引数がなければ日本時間の当日を使用し、指定があれば実在する日付として解析します。
+            if (args.length == 0) {
+                date = LocalDate.now(ZoneId.of("Asia/Tokyo"));
+            } else {
+                if (!args[0].matches("[0-9]{4}-[0-9]{2}-[0-9]{2}")) {
+                    throw new IllegalArgumentException(argumentError);
+                }
+                date = LocalDate.parse(args[0], DateTimeFormatter.ISO_LOCAL_DATE);
+            }
+        } catch (IllegalArgumentException | DateTimeException e) {
+            // 引数が不正な場合はエラー内容と処理時間を表示し、通信せず終了コード1で終了します。
+            System.out.println("処理結果     : 異常終了");
+            System.out.println("エラー内容   : " + argumentError);
+            double elapsedSeconds = (System.nanoTime() - startTime) / 1_000_000_000.0;
+            System.out.printf(Locale.ROOT, "処理時間     : %.2f秒%n", elapsedSeconds);
+            System.exit(1);
+            return;
+        }
+
+        // 確定した対象日を含む出力先を作成します。
         Path outputFile = Path.of("output",
                 "games_" + date.format(DateTimeFormatter.BASIC_ISO_DATE) + ".json");
 
-        // 見出しと対象日を表示し、終了コードと通信エラー用のメッセージを準備します。
-        System.out.println("=== MLB 試合情報取得 ===");
-        System.out.println();
+        // 対象日を表示し、終了コードと通信エラー用のメッセージを準備します。
         System.out.println("対象日       : " + date);
         int exitCode = 0;
         String httpStatus = "-";
@@ -148,7 +175,7 @@ public class MlbApiClient {
     }
 
     /**
-     * 抽出済みの試合の対戦チーム、日本時間の開始時刻、試合状態を表示します。
+     * 抽出済みの試合の対戦チーム、開始時刻、状態、球場、シリーズ情報を表示します。
      *
      * @param games 日本時間の対象日に該当する試合一覧
      */
@@ -174,9 +201,21 @@ public class MlbApiClient {
             String startTime = OffsetDateTime.parse(game.path("gameDateJst").asText())
                     .format(timeFormatter);
             String status = game.path("status").asText("-");
+
+            // 抽出済みの球場・シリーズ情報を読み取り、値がない場合は「-」として表示します。
+            String venue = game.path("venue").asText("-");
+            String seriesDescription = game.path("seriesDescription").asText("-");
+            JsonNode seriesGameNumber = game.path("seriesGameNumber");
+            String seriesGame = seriesGameNumber.isMissingNode() || seriesGameNumber.isNull()
+                    ? "-" : "Game " + seriesGameNumber.asText();
+
+            // 各試合に連番を付け、対戦チームと開始時刻・状態・球場・シリーズ情報を表示します。
             System.out.println(gameNumber + ". " + awayTeam + " @ " + homeTeam);
             System.out.println("   開始時刻 : " + startTime + " JST");
             System.out.println("   状態     : " + status);
+            System.out.println("   球場     : " + venue);
+            System.out.println("   シリーズ : " + seriesDescription);
+            System.out.println("   第何戦   : " + seriesGame);
             System.out.println();
             gameNumber++;
         }
